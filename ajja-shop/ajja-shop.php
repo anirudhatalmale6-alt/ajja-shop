@@ -420,6 +420,9 @@ function ajja_page_form() {
         $res = ajja_handle_submission();
         if ($res === true) { wp_safe_redirect(home_url('/danke')); exit; }
         $err = $res;
+    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+        // POST arrived but PHP discarded it -> upload exceeded server limit
+        $err = 'Die hochgeladenen Dateien sind leider zu gross für den Server. Bitte wählen Sie kleinere Fotos oder lassen Sie das Video weg und versuchen Sie es erneut.';
     }
     ajja_head('Gegenstand einreichen');
     ?>
@@ -429,8 +432,10 @@ function ajja_page_form() {
         <p class="lead" style="margin-bottom:26px">Laden Sie ein paar Fotos und ein kurzes Video hoch. Wir melden uns mit einer fairen Offerte.</p>
         <?php if ($err): ?><div class="ajja-error"><?php echo esc_html($err); ?></div><?php endif; ?>
         <div class="ajja-panel">
-            <form method="post" enctype="multipart/form-data">
+            <div id="ajja-jserr" class="ajja-error" style="display:none"></div>
+            <form method="post" enctype="multipart/form-data" id="ajja-form" novalidate>
                 <?php wp_nonce_field('ajja_submit', 'ajja_nonce'); ?>
+                <input type="hidden" name="ajja_submit" value="1">
                 <div class="grid2">
                     <div class="field"><label>Ihr Name *</label><input type="text" name="name" required value="<?php echo isset($_POST['name'])?esc_attr(wp_unslash($_POST['name'])):''; ?>"></div>
                     <div class="field"><label>E-Mail *</label><input type="email" name="email" required value="<?php echo isset($_POST['email'])?esc_attr(wp_unslash($_POST['email'])):''; ?>"></div>
@@ -447,9 +452,9 @@ function ajja_page_form() {
                 <div class="field"><label>Beschreibung *</label>
                     <textarea name="description" required placeholder="Marke, Modell, Zustand, Alter, Zubehör …"><?php echo isset($_POST['description'])?esc_textarea(wp_unslash($_POST['description'])):''; ?></textarea>
                 </div>
-                <div class="field"><label>Fotos (1–3) *</label>
-                    <input type="file" name="photos[]" accept="image/*" multiple required>
-                    <div class="hint">JPG oder PNG, bis zu 3 Fotos.</div>
+                <div class="field"><label>Fotos (1–3, empfohlen)</label>
+                    <input type="file" name="photos[]" accept="image/*" multiple>
+                    <div class="hint">JPG oder PNG, bis zu 3 Fotos. Fotos helfen sehr bei der Bewertung — Sie können aber auch ohne einreichen und die Fotos nachreichen.</div>
                 </div>
                 <div class="field"><label>Video (optional)</label>
                     <input type="file" name="video" accept="video/*">
@@ -460,6 +465,31 @@ function ajja_page_form() {
             </form>
         </div>
     </div></div>
+    <script>
+    (function(){
+        var f = document.getElementById('ajja-form'); if (!f) return;
+        var box = document.getElementById('ajja-jserr');
+        var g = function(n){ return f.querySelector('[name="' + n + '"]'); };
+        f.addEventListener('submit', function(e){
+            var errs = [];
+            var name = (g('name').value || '').trim();
+            var email = (g('email').value || '').trim();
+            var desc = (g('description').value || '').trim();
+            if (!name) errs.push('Bitte geben Sie Ihren Namen ein.');
+            if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) errs.push('Bitte geben Sie eine gültige E-Mail-Adresse ein.');
+            if (!desc) errs.push('Bitte beschreiben Sie den Gegenstand kurz.');
+            if (errs.length) {
+                e.preventDefault();
+                box.innerHTML = errs.join('<br>');
+                box.style.display = 'block';
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                return false;
+            }
+            var btn = f.querySelector('button[type="submit"]');
+            if (btn) { btn.disabled = true; btn.textContent = 'Wird gesendet …'; }
+        });
+    })();
+    </script>
     <?php
     ajja_foot();
 }
